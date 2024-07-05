@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -111,13 +112,13 @@ func (db *fileDB[T]) List(field, value string) ([]T, error) {
 }
 
 func ReadObject[T FileEntity](path string) (T, error) {
+	e := reflect.New(reflect.TypeOf(new(T)).Elem().Elem()).Interface().(T)
 	bytes, err := os.ReadFile(filepath.FromSlash(path))
 	if err != nil {
-		return *new(T), err
+		return e, err
 	}
-	e := *new(T)
 	if err = json.Unmarshal(bytes, e); err != nil {
-		return *new(T), err
+		return e, err
 	}
 	return e, nil
 }
