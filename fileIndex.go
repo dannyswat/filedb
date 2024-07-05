@@ -30,11 +30,15 @@ type fileIndex[T FileEntity] struct {
 }
 
 func NewFileIndex[T FileEntity](path string, indexConfig []FileIndexConfig) FileIndex[T] {
-	return &fileIndex[T]{
+	fi := &fileIndex[T]{
 		path:         path,
 		indexConfigs: indexConfig,
 		indexes:      make(map[string]map[string][]int),
 	}
+	for _, ic := range indexConfig {
+		fi.indexes[ic.Field] = make(map[string][]int)
+	}
+	return fi
 }
 
 func (fi *fileIndex[T]) Init() error {
@@ -91,7 +95,12 @@ func (fi *fileIndex[T]) rebuildIndexInternal(field, path string, index map[strin
 
 func (fi *fileIndex[T]) Insert(e T) error {
 	for _, ic := range fi.indexConfigs {
-		fi.indexes[ic.Field][e.GetValue(ic.Field)] = append(fi.indexes[ic.Field][e.GetValue(ic.Field)], e.GetID())
+		index, ok := fi.indexes[ic.Field][e.GetValue(ic.Field)]
+		if !ok {
+			index = make([]int, 0)
+		}
+		index = append(index, e.GetID())
+		fi.indexes[ic.Field][e.GetValue(ic.Field)] = index
 		file, err := os.OpenFile(fi.GetPath(ic.Field), os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			return err

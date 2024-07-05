@@ -39,12 +39,22 @@ func (db *fileDB[T]) Init() error {
 			return err
 		}
 	}
+	if err := db.stat.Init(); err != nil {
+		return err
+	}
+
+	if err := db.index.Init(); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (db *fileDB[T]) Insert(e T) error {
 	e.SetID(db.stat.GetNextID())
 	if err := db.index.Insert(e); err != nil {
+		return err
+	}
+	if err := db.stat.AddCount(1); err != nil {
 		return err
 	}
 	bytes, err := json.Marshal(e)
@@ -72,6 +82,9 @@ func (db *fileDB[T]) Update(e T) error {
 func (db *fileDB[T]) Delete(id int) error {
 	prev, err := db.Find(id)
 	if err != nil {
+		return err
+	}
+	if err = db.stat.AddCount(-1); err != nil {
 		return err
 	}
 	if err = db.index.Delete(prev); err != nil {
@@ -118,5 +131,5 @@ func (db *fileDB[T]) GetObjectPath(id int) string {
 		}
 		i /= 10
 	}
-	return filepath.FromSlash(db.path + "/" + strings.Join(nums, "/") + ".dat")
+	return filepath.FromSlash(db.path + "/" + strings.Join(nums, "/") + strconv.Itoa(id) + ".dat")
 }
