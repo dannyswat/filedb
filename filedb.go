@@ -1,11 +1,14 @@
 package filedb
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 type FileDB[T FileEntity] interface {
-	HasIndex(field string, unique bool) FileDB[T]
 	Init() error
 	Insert(e T) error
 	Update(e T) error
@@ -17,17 +20,17 @@ type FileDB[T FileEntity] interface {
 type fileDB[T FileEntity] struct {
 	path    string
 	indexes []FileIndexConfig
-	nextID  int
-	count   int
+	stat    FileStat
+	index   FileIndex[T]
 }
 
-func NewFileDB[T FileEntity](path string) *fileDB[T] {
-	return &fileDB[T]{path: path, indexes: make([]FileIndexConfig, 0), nextID: 1, count: 0}
-}
-
-func (db *fileDB[T]) HasIndex(field string, unique bool) *fileDB[T] {
-	db.indexes = append(db.indexes, FileIndexConfig{Field: field, Unique: unique})
-	return db
+func NewFileDB[T FileEntity](path string, indexes []FileIndexConfig) FileDB[T] {
+	return &fileDB[T]{
+		path:    path,
+		indexes: indexes,
+		stat:    NewFileStat(path),
+		index:   NewFileIndex[T](path, indexes),
+	}
 }
 
 func (db *fileDB[T]) Init() error {
@@ -37,4 +40,83 @@ func (db *fileDB[T]) Init() error {
 		}
 	}
 	return nil
+}
+
+func (db *fileDB[T]) Insert(e T) error {
+	e.SetID(db.stat.GetNextID())
+	if err := db.index.Insert(e); err != nil {
+		return err
+	}
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(db.GetObjectPath(e.GetID()), bytes, 0644)
+}
+
+func (db *fileDB[T]) Update(e T) error {
+	prev, err := db.Find(e.GetID())
+	if err != nil {
+		return err
+	}
+	if err = db.index.Update(e, prev); err != nil {
+		return err
+	}
+	bytes, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(db.GetObjectPath(e.GetID()), bytes, 0644)
+}
+
+func (db *fileDB[T]) Delete(id int) error {
+	prev, err := db.Find(id)
+	if err != nil {
+		return err
+	}
+	if err = db.index.Delete(prev); err != nil {
+		return err
+	}
+	return os.Remove(db.GetObjectPath(id))
+}
+
+func (db *fileDB[T]) Find(id int) (T, error) {
+	return ReadObject[T](db.GetObjectPath(id))
+}
+
+func (db *fileDB[T]) List(field, value string) ([]T, error) {
+	ids := db.index.SearchId(field, value)
+	es := make([]T, 0)
+	for _, id := range ids {
+		e, err := db.Find(id)
+		if err != nil {
+			return nil, err
+		}
+		es = append(es, e)
+	}
+	return es, nil
+}
+
+func ReadObject[T FileEntity](path string) (T, error) {
+	bytes, err := os.ReadFile(filepath.FromSlash(path))
+	if err != nil {
+		return *new(T), err
+	}
+	e := *new(T)
+	if err = json.Unmarshal(bytes, e); err != nil {
+		return *new(T), err
+	}
+	return e, nil
+}
+
+func (db *fileDB[T]) GetObjectPath(id int) string {
+	nums := make([]string, 0)
+	i := id / 1000
+	for i > 0 {
+		if i%10 > 0 {
+			nums = append(nums, strconv.Itoa(i%10))
+		}
+		i /= 10
+	}
+	return filepath.FromSlash(db.path + "/" + strings.Join(nums, "/") + ".dat")
 }
