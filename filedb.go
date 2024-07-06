@@ -145,8 +145,16 @@ func (db *fileDB[T]) GetObjectPath(id int) string {
 	for i > 0 {
 		if i%10 > 0 {
 			nums = append(nums, strconv.Itoa(i%10))
+			CreateDir(filepath.FromSlash(db.path + "/" + strings.Join(nums, "/")))
 		}
 		i /= 10
 	}
 	return filepath.FromSlash(db.path + "/" + strings.Join(nums, "/") + strconv.Itoa(id) + ".dat")
+}
+
+func CreateDir(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return os.Mkdir(path, 0755)
+	}
+	return nil
 }
