@@ -17,6 +17,8 @@ type FileDB[T FileEntity] interface {
 	Find(id int) (T, error)
 	List(field, value string) ([]T, error)
 	GetCount() int
+	PeekNextID() int
+	deleteDB() error
 }
 
 type fileDB[T FileEntity] struct {
@@ -52,7 +54,7 @@ func (db *fileDB[T]) Init() error {
 }
 
 func (db *fileDB[T]) Insert(e T) error {
-	e.SetID(db.stat.GetNextID())
+	e.SetID(db.stat.GetNextID(false))
 	if err := db.index.Insert(e); err != nil {
 		return err
 	}
@@ -114,6 +116,14 @@ func (db *fileDB[T]) List(field, value string) ([]T, error) {
 
 func (db *fileDB[T]) GetCount() int {
 	return db.stat.GetCount()
+}
+
+func (db *fileDB[T]) PeekNextID() int {
+	return db.stat.GetNextID(true)
+}
+
+func (db *fileDB[T]) deleteDB() error {
+	return os.RemoveAll(db.path)
 }
 
 func ReadObject[T FileEntity](path string) (T, error) {

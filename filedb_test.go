@@ -44,25 +44,60 @@ func TestFileDB(t *testing.T) {
 	if err := db.Init(); err != nil {
 		t.Error(err)
 	}
+	lastID := db.PeekNextID() - 1
 	initCount := db.GetCount()
 
 	if err := db.Insert(NewTestEntity("Alice", 20)); err != nil {
-		t.Error(err)
+		if initCount > 0 {
+			if err.Error() != "unique index violation: Name" {
+				t.Error(err)
+			}
+		} else {
+			t.Error(err)
+		}
 	}
 	if err := db.Insert(NewTestEntity("Bob", 30)); err != nil {
-		t.Error(err)
+		if initCount > 0 {
+			if err.Error() != "unique index violation: Name" {
+				t.Error(err)
+			}
+		} else {
+			t.Error(err)
+		}
 	}
 	if err := db.Insert(NewTestEntity("Peter", 20)); err != nil {
-		t.Error(err)
+		if initCount > 0 {
+			if err.Error() != "unique index violation: Name" {
+				t.Error(err)
+			}
+		} else {
+			t.Error(err)
+		}
 	}
-	e, err := db.Find(initCount + 2)
+	e, err := db.Find(lastID + 2)
 	if err != nil {
 		t.Error(err)
 	}
 	if e.Name != "Bob" {
 		t.Error("Find failed")
 	}
-	if db.GetCount() != initCount+3 {
+	if db.GetCount() != 3 {
 		t.Error("GetCount failed")
+	}
+	if err := db.Delete(lastID + 1); err != nil {
+		t.Error(err)
+	}
+	if err := db.Delete(lastID + 2); err != nil {
+		t.Error(err)
+	}
+	if err := db.Delete(lastID + 3); err != nil {
+		t.Error(err)
+	}
+	if db.GetCount() != 0 {
+		t.Error("GetCount after deleted failed")
+	}
+
+	if err := db.deleteDB(); err != nil {
+		t.Error(err)
 	}
 }

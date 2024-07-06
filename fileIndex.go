@@ -95,6 +95,14 @@ func (fi *fileIndex[T]) rebuildIndexInternal(field, path string, index map[strin
 
 func (fi *fileIndex[T]) Insert(e T) error {
 	for _, ic := range fi.indexConfigs {
+		if ic.Unique {
+			if idx, ok := fi.indexes[ic.Field][e.GetValue(ic.Field)]; ok && len(idx) > 0 {
+				return fmt.Errorf("unique index violation: %s", ic.Field)
+			}
+		}
+	}
+
+	for _, ic := range fi.indexConfigs {
 		index, ok := fi.indexes[ic.Field][e.GetValue(ic.Field)]
 		if !ok {
 			index = make([]int, 0)
@@ -116,12 +124,23 @@ func (fi *fileIndex[T]) Update(e, prev T) error {
 		if e.GetValue(ic.Field) == prev.GetValue(ic.Field) {
 			continue
 		}
+		if ic.Unique {
+			if idx, ok := fi.indexes[ic.Field][e.GetValue(ic.Field)]; ok && len(idx) > 0 {
+				return fmt.Errorf("unique index violation: %s", ic.Field)
+			}
+		}
+	}
+
+	for _, ic := range fi.indexConfigs {
+		if e.GetValue(ic.Field) == prev.GetValue(ic.Field) {
+			continue
+		}
 		index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
 		ci := slices.Index(index, e.GetID())
 		index = append(index[:ci], index[ci+1:]...)
 		fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
 		fi.indexes[ic.Field][e.GetValue(ic.Field)] = append(fi.indexes[ic.Field][e.GetValue(ic.Field)], e.GetID())
-		go fi.Save(ic.Field)
+		fi.Save(ic.Field)
 	}
 	return nil
 }
@@ -132,7 +151,7 @@ func (fi *fileIndex[T]) Delete(prev T) error {
 		ci := slices.Index(index, prev.GetID())
 		index = append(index[:ci], index[ci+1:]...)
 		fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
-		go fi.Save(ic.Field)
+		fi.Save(ic.Field)
 	}
 	return nil
 }

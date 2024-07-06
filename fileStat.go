@@ -8,7 +8,7 @@ import (
 
 type FileStat interface {
 	Init() error
-	GetNextID() int
+	GetNextID(peek bool) int
 	GetCount() int
 	AddCount(c int) error
 }
@@ -45,10 +45,13 @@ func (fs *fileStat) Init() error {
 	return nil
 }
 
-func (fs *fileStat) GetNextID() int {
+func (fs *fileStat) GetNextID(peek bool) int {
+	if peek {
+		return fs.nextID
+	}
 	id := fs.nextID
 	fs.nextID++
-	go fs.Save()
+	fs.Save()
 	return id
 }
 
@@ -58,7 +61,7 @@ func (fs *fileStat) GetCount() int {
 
 func (fs *fileStat) AddCount(c int) error {
 	fs.count += c
-	go fs.Save()
+	fs.Save()
 	return nil
 }
 
