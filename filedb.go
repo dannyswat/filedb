@@ -122,6 +122,7 @@ func (db *fileDB[T]) PeekNextID() int {
 	return db.stat.GetNextID(true)
 }
 
+//lint:ignore U1000 Ignore unused function temporarily for testing
 func (db *fileDB[T]) deleteDB() error {
 	return os.RemoveAll(db.path)
 }
