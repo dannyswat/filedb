@@ -1,6 +1,8 @@
 # FileDB
 ![Build and Test](https://github.com/dannyswat/filedb/actions/workflows/go.yml/badge.svg)
 
+A filesystem based database with indexing written in Go.
+
 ## Feature Overview
 - Store objects in file system
 - Automatically generate object ID
