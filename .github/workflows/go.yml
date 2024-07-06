@@ -8,8 +8,8 @@ on:
     branches: [ "master" ]
     paths-ignore:
       - '*.md'
-      - '/LICENSE'
-      - '/.gitignore'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [ "master" ]
 
