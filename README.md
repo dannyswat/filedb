@@ -12,10 +12,10 @@
 - Not support query with value comparation
 
 ## Latest Version
-v0.1.0-alpha
+v0.1.1-alpha
 
 ```console
-go get github.com/dannyswat/filedb@v0.1.0-alpha
+go get github.com/dannyswat/filedb@v0.1.1-alpha
 ```
 
 ## Future Plan
