@@ -16,6 +16,7 @@ type FileDB[T FileEntity] interface {
 	Delete(id int) error
 	Find(id int) (T, error)
 	List(field, value string) ([]T, error)
+	GetCount() int
 }
 
 type fileDB[T FileEntity] struct {
@@ -109,6 +110,10 @@ func (db *fileDB[T]) List(field, value string) ([]T, error) {
 		es = append(es, e)
 	}
 	return es, nil
+}
+
+func (db *fileDB[T]) GetCount() int {
+	return db.stat.GetCount()
 }
 
 func ReadObject[T FileEntity](path string) (T, error) {

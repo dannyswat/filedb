@@ -44,6 +44,8 @@ func TestFileDB(t *testing.T) {
 	if err := db.Init(); err != nil {
 		t.Error(err)
 	}
+	initCount := db.GetCount()
+
 	if err := db.Insert(NewTestEntity("Alice", 20)); err != nil {
 		t.Error(err)
 	}
@@ -53,11 +55,14 @@ func TestFileDB(t *testing.T) {
 	if err := db.Insert(NewTestEntity("Peter", 20)); err != nil {
 		t.Error(err)
 	}
-	e, err := db.Find(2)
+	e, err := db.Find(initCount + 2)
 	if err != nil {
 		t.Error(err)
 	}
 	if e.Name != "Bob" {
 		t.Error("Find failed")
+	}
+	if db.GetCount() != initCount+3 {
+		t.Error("GetCount failed")
 	}
 }
