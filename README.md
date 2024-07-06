@@ -1,4 +1,5 @@
 # FileDB
+![Build and Test](https://github.com/dannyswat/filedb/actions/workflows/go.yml/badge.svg)
 
 ## Feature Overview
 - Store objects in file system
