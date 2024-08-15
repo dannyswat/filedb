@@ -15,10 +15,10 @@ A filesystem based database with indexing written in Go.
 - Not support query with value comparation
 
 ## Latest Version
-v0.1.1-alpha
+v0.1.2-alpha
 
 ```console
-go get github.com/dannyswat/filedb@v0.1.1-alpha
+go get github.com/dannyswat/filedb@v0.1.2-alpha
 ```
 
 ## Future Plan

@@ -6,37 +6,46 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 type FileIndexConfig struct {
-	Unique bool
-	Field  string
+	Unique  bool
+	Field   string
+	Include []string
+}
+
+type IndexEntry struct {
+	Value  string
+	ID     int
+	Others map[string]string
 }
 
 type FileIndex[T FileEntity] interface {
 	Init() error
-	RebuildIndex(field string) error
+	RebuildIndex(config *FileIndexConfig) error
 	Insert(e T) error
 	Update(e, prev T) error
 	Delete(prev T) error
 	FindId(field string, value string) int
 	SearchId(field string, value string) []int
+	SearchIndex(field string, value string) []*IndexEntry
 }
 
 type fileIndex[T FileEntity] struct {
 	path         string
 	indexConfigs []FileIndexConfig
-	indexes      map[string]map[string][]int
+	indexes      map[string]map[string][]*IndexEntry
 }
 
 func NewFileIndex[T FileEntity](path string, indexConfig []FileIndexConfig) FileIndex[T] {
 	fi := &fileIndex[T]{
 		path:         path,
 		indexConfigs: indexConfig,
-		indexes:      make(map[string]map[string][]int),
+		indexes:      make(map[string]map[string][]*IndexEntry),
 	}
 	for _, ic := range indexConfig {
-		fi.indexes[ic.Field] = make(map[string][]int)
+		fi.indexes[ic.Field] = make(map[string][]*IndexEntry)
 	}
 	return fi
 }
@@ -49,44 +58,72 @@ func (fi *fileIndex[T]) Init() error {
 				return err
 			}
 			defer file.Close()
-			err = fi.RebuildIndex(ic.Field)
+			err = fi.RebuildIndex(&ic)
 			if err != nil {
 				return err
 			}
 			for k, v := range fi.indexes[ic.Field] {
-				for _, id := range v {
-					file.WriteString(fmt.Sprintf("%s\t%d\n", k, id))
+				for _, entry := range v {
+					file.WriteString(fmt.Sprintf("%s\t%d", k, entry.ID))
+					for _, i := range ic.Include {
+						file.WriteString(fmt.Sprintf("\t%s", entry.Others[i]))
+					}
+					file.WriteString("\n")
 				}
 			}
 		} else {
 			if err = fi.LoadIndex(ic.Field); err != nil {
-				return err
+				_, ok := err.(*InvalidIndexError)
+				if !ok {
+					return err
+				}
+				if err = fi.RebuildIndex(&ic); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func (fi *fileIndex[T]) RebuildIndex(field string) error {
-	fi.indexes[field] = make(map[string][]int)
-	fi.rebuildIndexInternal(field, "", fi.indexes[field])
+func (fi *fileIndex[T]) RebuildIndex(config *FileIndexConfig) error {
+	fi.indexes[config.Field] = make(map[string][]*IndexEntry)
+	fi.rebuildIndexInternal(config.Field, "", config.Include, fi.indexes[config.Field])
 	return nil
 }
 
-func (fi *fileIndex[T]) rebuildIndexInternal(field, path string, index map[string][]int) error {
+func getFields(e FileEntity, includes []string) map[string]string {
+	fields := make(map[string]string)
+	for _, f := range includes {
+		fields[f] = e.GetValue(f)
+	}
+	return fields
+}
+
+func createIndexEntry(e FileEntity, field string, includes []string) *IndexEntry {
+	return &IndexEntry{
+		Value:  e.GetValue(field),
+		ID:     e.GetID(),
+		Others: getFields(e, includes),
+	}
+}
+
+func (fi *fileIndex[T]) rebuildIndexInternal(field, path string, includes []string, index map[string][]*IndexEntry) error {
 	entries, err := os.ReadDir(filepath.FromSlash(fi.path + path))
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			fi.rebuildIndexInternal(field, path+"/"+entry.Name(), index)
+			fi.rebuildIndexInternal(field, path+"/"+entry.Name(), includes, index)
 		} else {
 			var e T
 			if e, err = ReadObject[T](fi.path + path + "/" + entry.Name()); err != nil {
 				return err
 			}
-			index[e.GetValue(field)] = append(index[e.GetValue(field)], e.GetID())
+			index[e.GetValue(field)] = append(
+				index[e.GetValue(field)],
+				createIndexEntry(e, field, includes))
 		}
 	}
 
@@ -105,16 +142,20 @@ func (fi *fileIndex[T]) Insert(e T) error {
 	for _, ic := range fi.indexConfigs {
 		index, ok := fi.indexes[ic.Field][e.GetValue(ic.Field)]
 		if !ok {
-			index = make([]int, 0)
+			index = make([]*IndexEntry, 0)
 		}
-		index = append(index, e.GetID())
+		index = append(index, createIndexEntry(e, ic.Field, ic.Include))
 		fi.indexes[ic.Field][e.GetValue(ic.Field)] = index
 		file, err := os.OpenFile(fi.GetPath(ic.Field), os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			return err
 		}
 		defer file.Close()
-		file.WriteString(fmt.Sprintf("%s\t%d\n", e.GetValue(ic.Field), e.GetID()))
+		file.WriteString(fmt.Sprintf("%s\t%d", e.GetValue(ic.Field), e.GetID()))
+		for _, i := range ic.Include {
+			file.WriteString(fmt.Sprintf("\t%s", e.GetValue(i)))
+		}
+		file.WriteString("\n")
 	}
 	return nil
 }
@@ -130,25 +171,30 @@ func (fi *fileIndex[T]) Update(e, prev T) error {
 			}
 		}
 	}
-
+	idComparer := func(item *IndexEntry) bool {
+		return prev.GetID() == item.ID
+	}
 	for _, ic := range fi.indexConfigs {
 		if e.GetValue(ic.Field) == prev.GetValue(ic.Field) {
 			continue
 		}
 		index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
-		ci := slices.Index(index, e.GetID())
+		ci := slices.IndexFunc(index, idComparer)
 		index = append(index[:ci], index[ci+1:]...)
 		fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
-		fi.indexes[ic.Field][e.GetValue(ic.Field)] = append(fi.indexes[ic.Field][e.GetValue(ic.Field)], e.GetID())
+		fi.indexes[ic.Field][e.GetValue(ic.Field)] = append(fi.indexes[ic.Field][e.GetValue(ic.Field)], createIndexEntry(e, ic.Field, ic.Include))
 		fi.Save(ic.Field)
 	}
 	return nil
 }
 
 func (fi *fileIndex[T]) Delete(prev T) error {
+	idComparer := func(item *IndexEntry) bool {
+		return prev.GetID() == item.ID
+	}
 	for _, ic := range fi.indexConfigs {
 		index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
-		ci := slices.Index(index, prev.GetID())
+		ci := slices.IndexFunc(index, idComparer)
 		index = append(index[:ci], index[ci+1:]...)
 		fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
 		fi.Save(ic.Field)
@@ -159,13 +205,24 @@ func (fi *fileIndex[T]) Delete(prev T) error {
 func (fi *fileIndex[T]) FindId(field string, value string) int {
 	if index, ok := fi.indexes[field][value]; ok {
 		if len(index) > 0 {
-			return index[0]
+			return index[0].ID
 		}
 	}
 	return 0
 }
 
 func (fi *fileIndex[T]) SearchId(field string, value string) []int {
+	if index, ok := fi.indexes[field][value]; ok {
+		ids := make([]int, len(index))
+		for i, v := range index {
+			ids[i] = v.ID
+		}
+		return ids
+	}
+	return nil
+}
+
+func (fi *fileIndex[T]) SearchIndex(field string, value string) []*IndexEntry {
 	if index, ok := fi.indexes[field][value]; ok {
 		return index
 	}
@@ -182,12 +239,16 @@ func (fi *fileIndex[T]) Load() error {
 }
 
 func (fi *fileIndex[T]) LoadIndex(name string) error {
+	ic := fi.GetIndexConfig(name)
+	if ic == nil {
+		return fmt.Errorf("index config not found: %s", name)
+	}
 	file, err := os.OpenFile(fi.GetPath(name), os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	fi.indexes[name] = make(map[string][]int)
+	fi.indexes[name] = make(map[string][]*IndexEntry)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -196,8 +257,18 @@ func (fi *fileIndex[T]) LoadIndex(name string) error {
 		}
 		var id int
 		var value string
-		fmt.Sscanf(line, "%s\t%d", &value, &id)
-		fi.indexes[name][value] = append(fi.indexes[name][value], id)
+		parts := strings.Split(line, "\t")
+		if len(parts) != len(ic.Include)+2 {
+			return &InvalidIndexError{Message: "invalid index file format"}
+		}
+		value = parts[0]
+		fmt.Sscanf(parts[1], "%d", &id)
+		others := make(map[string]string)
+		for i := 2; i < len(parts); i++ {
+			others[ic.Include[i-2]] = parts[i]
+		}
+		entry := &IndexEntry{Value: value, ID: id, Others: others}
+		fi.indexes[name][value] = append(fi.indexes[name][value], entry)
 	}
 	return nil
 }
@@ -209,8 +280,8 @@ func (fi *fileIndex[T]) Save(name string) error {
 	}
 	defer file.Close()
 	for k, v := range fi.indexes[name] {
-		for _, id := range v {
-			file.WriteString(fmt.Sprintf("%s\t%d\n", k, id))
+		for _, entry := range v {
+			file.WriteString(fmt.Sprintf("%s\t%d\n", k, entry.ID))
 		}
 	}
 	return nil
@@ -218,4 +289,13 @@ func (fi *fileIndex[T]) Save(name string) error {
 
 func (fi *fileIndex[T]) GetPath(name string) string {
 	return filepath.FromSlash(fi.path + "/_" + name + ".idx")
+}
+
+func (fi *fileIndex[T]) GetIndexConfig(name string) *FileIndexConfig {
+	for _, ic := range fi.indexConfigs {
+		if ic.Field == name {
+			return &ic
+		}
+	}
+	return nil
 }
