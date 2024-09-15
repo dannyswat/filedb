@@ -17,6 +17,7 @@ type FileDB[T FileEntity] interface {
 	Find(id int) (T, error)
 	List(field, value string) ([]T, error)
 	ListIndexFields(field string, value string) ([]*IndexEntry, error)
+	ListAllIndexFields(field string) ([]*IndexEntry, error)
 	GetCount() int
 	PeekNextID() int
 	deleteDB() error
@@ -117,6 +118,10 @@ func (db *fileDB[T]) List(field, value string) ([]T, error) {
 
 func (db *fileDB[T]) ListIndexFields(field string, value string) ([]*IndexEntry, error) {
 	return db.index.SearchIndex(field, value), nil
+}
+
+func (db *fileDB[T]) ListAllIndexFields(field string) ([]*IndexEntry, error) {
+	return db.index.SearchAllIndex(field), nil
 }
 
 func (db *fileDB[T]) GetCount() int {

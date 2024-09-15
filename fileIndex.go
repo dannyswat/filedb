@@ -30,6 +30,7 @@ type FileIndex[T FileEntity] interface {
 	FindId(field string, value string) int
 	SearchId(field string, value string) []int
 	SearchIndex(field string, value string) []*IndexEntry
+	SearchAllIndex(field string) []*IndexEntry
 }
 
 type fileIndex[T FileEntity] struct {
@@ -227,6 +228,14 @@ func (fi *fileIndex[T]) SearchIndex(field string, value string) []*IndexEntry {
 		return index
 	}
 	return nil
+}
+
+func (fi *fileIndex[T]) SearchAllIndex(field string) []*IndexEntry {
+	var result []*IndexEntry
+	for _, v := range fi.indexes[field] {
+		result = append(result, v...)
+	}
+	return result
 }
 
 func (fi *fileIndex[T]) Load() error {
