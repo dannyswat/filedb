@@ -290,7 +290,11 @@ func (fi *fileIndex[T]) Save(name string) error {
 	defer file.Close()
 	for k, v := range fi.indexes[name] {
 		for _, entry := range v {
-			file.WriteString(fmt.Sprintf("%s\t%d\n", k, entry.ID))
+			file.WriteString(fmt.Sprintf("%s\t%d", k, entry.ID))
+			for _, i := range fi.GetIndexConfig(name).Include {
+				file.WriteString(fmt.Sprintf("\t%s", entry.Others[i]))
+			}
+			file.WriteString("\n")
 		}
 	}
 	return nil
