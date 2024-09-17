@@ -177,6 +177,19 @@ func (fi *fileIndex[T]) Update(e, prev T) error {
 	}
 	for _, ic := range fi.indexConfigs {
 		if e.GetValue(ic.Field) == prev.GetValue(ic.Field) {
+			changed := false
+			for _, i := range ic.Include {
+				if e.GetValue(i) != prev.GetValue(i) {
+					index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
+					ci := slices.IndexFunc(index, idComparer)
+					index[ci].Others[i] = e.GetValue(i)
+					fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
+					changed = true
+				}
+			}
+			if changed {
+				fi.Save(ic.Field)
+			}
 			continue
 		}
 		index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
