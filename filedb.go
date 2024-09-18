@@ -26,7 +26,7 @@ type FileDB[T FileEntity] interface {
 type fileDB[T FileEntity] struct {
 	path    string
 	indexes []FileIndexConfig
-	stat    FileStat
+	stat    FileStat[T]
 	index   FileIndex[T]
 }
 
@@ -34,7 +34,7 @@ func NewFileDB[T FileEntity](path string, indexes []FileIndexConfig) FileDB[T] {
 	return &fileDB[T]{
 		path:    path,
 		indexes: indexes,
-		stat:    NewFileStat(path),
+		stat:    NewFileStat[T](path),
 		index:   NewFileIndex[T](path, indexes),
 	}
 }
@@ -45,11 +45,10 @@ func (db *fileDB[T]) Init() error {
 			return err
 		}
 	}
-	if err := db.stat.Init(); err != nil {
+	if err := db.index.Init(); err != nil {
 		return err
 	}
-
-	if err := db.index.Init(); err != nil {
+	if err := db.stat.Init(db.index); err != nil {
 		return err
 	}
 	return nil

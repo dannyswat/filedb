@@ -6,22 +6,22 @@ import (
 	"path/filepath"
 )
 
-type FileStat interface {
-	Init() error
+type FileStat[T FileEntity] interface {
+	Init(fi FileIndex[T]) error
 	GetNextID(peek bool) int
 	GetCount() int
 	AddCount(c int) error
 }
 
-type fileStat struct {
+type fileStat[T FileEntity] struct {
 	path     string
 	statPath string
 	nextID   int
 	count    int
 }
 
-func NewFileStat(path string) FileStat {
-	return &fileStat{
+func NewFileStat[T FileEntity](path string) FileStat[T] {
+	return &fileStat[T]{
 		path:     path,
 		statPath: filepath.FromSlash(path + "/_stat.dat"),
 		nextID:   1,
@@ -29,12 +29,14 @@ func NewFileStat(path string) FileStat {
 	}
 }
 
-func (fs *fileStat) Init() error {
+func (fs *fileStat[T]) Init(fi FileIndex[T]) error {
 	if _, err := os.Stat(fs.statPath); os.IsNotExist(err) {
 		file, err := os.OpenFile(fs.statPath, os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}
+		fs.nextID, fs.count = fi.FindMaxIdAndCount()
+		fs.nextID++
 		file.WriteString(fmt.Sprintf("%d\n%d\n", fs.nextID, fs.count))
 		file.Close()
 	} else {
@@ -45,7 +47,7 @@ func (fs *fileStat) Init() error {
 	return nil
 }
 
-func (fs *fileStat) GetNextID(peek bool) int {
+func (fs *fileStat[T]) GetNextID(peek bool) int {
 	if peek {
 		return fs.nextID
 	}
@@ -55,17 +57,17 @@ func (fs *fileStat) GetNextID(peek bool) int {
 	return id
 }
 
-func (fs *fileStat) GetCount() int {
+func (fs *fileStat[T]) GetCount() int {
 	return fs.count
 }
 
-func (fs *fileStat) AddCount(c int) error {
+func (fs *fileStat[T]) AddCount(c int) error {
 	fs.count += c
 	fs.Save()
 	return nil
 }
 
-func (fs *fileStat) Load() error {
+func (fs *fileStat[T]) Load() error {
 	file, err := os.Open(fs.statPath)
 	if err != nil {
 		return err
@@ -75,7 +77,7 @@ func (fs *fileStat) Load() error {
 	return nil
 }
 
-func (fs *fileStat) Save() error {
+func (fs *fileStat[T]) Save() error {
 	file, err := os.OpenFile(fs.statPath, os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
