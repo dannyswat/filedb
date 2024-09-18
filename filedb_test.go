@@ -153,6 +153,19 @@ func TestFileIndexInclude(t *testing.T) {
 	if records[1].Others["Name"] != "Peter" {
 		t.Error("ListIndexFields failed")
 	}
+	if err := db.Update(&TestEntity{ID: 1, Name: "Alice S", Age: 20}); err != nil {
+		t.Error(err)
+	}
+	records, err = db.ListIndexFields("Age", "20")
+	if err != nil {
+		t.Error(err)
+	}
+	if len(records) != 2 {
+		t.Error("ListIndexFields failed after update")
+	}
+	if records[0].Others["Name"] != "Alice S" {
+		t.Error("ListIndexFields failed after update")
+	}
 	e, err := db.Find(lastID + 2)
 	if err != nil {
 		t.Error(err)

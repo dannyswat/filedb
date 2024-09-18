@@ -162,6 +162,8 @@ func (fi *fileIndex[T]) Insert(e T) error {
 }
 
 func (fi *fileIndex[T]) Update(e, prev T) error {
+
+	// Validation
 	for _, ic := range fi.indexConfigs {
 		if e.GetValue(ic.Field) == prev.GetValue(ic.Field) {
 			continue
@@ -175,28 +177,36 @@ func (fi *fileIndex[T]) Update(e, prev T) error {
 	idComparer := func(item *IndexEntry) bool {
 		return prev.GetID() == item.ID
 	}
+
+	// Update index
 	for _, ic := range fi.indexConfigs {
-		if e.GetValue(ic.Field) == prev.GetValue(ic.Field) {
+		indexFile := fi.indexes[ic.Field]
+		newKeyValue := e.GetValue(ic.Field)
+		oldKeyValue := prev.GetValue(ic.Field)
+		if newKeyValue == oldKeyValue {
+			// No change in index field, check if include fields have changed
+			indexEntries := indexFile[newKeyValue]
+			entryIndex := slices.IndexFunc(indexEntries, idComparer)
 			changed := false
-			for _, i := range ic.Include {
-				if e.GetValue(i) != prev.GetValue(i) {
-					index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
-					ci := slices.IndexFunc(index, idComparer)
-					index[ci].Others[i] = e.GetValue(i)
-					fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
+			for _, field := range ic.Include {
+				if e.GetValue(field) != prev.GetValue(field) {
+					indexEntries[entryIndex].Others[field] = e.GetValue(field)
 					changed = true
 				}
 			}
 			if changed {
+				indexFile[newKeyValue] = indexEntries
 				fi.Save(ic.Field)
 			}
 			continue
 		}
-		index := fi.indexes[ic.Field][prev.GetValue(ic.Field)]
-		ci := slices.IndexFunc(index, idComparer)
-		index = append(index[:ci], index[ci+1:]...)
-		fi.indexes[ic.Field][prev.GetValue(ic.Field)] = index
-		fi.indexes[ic.Field][e.GetValue(ic.Field)] = append(fi.indexes[ic.Field][e.GetValue(ic.Field)], createIndexEntry(e, ic.Field, ic.Include))
+
+		// Change in index field, remove the old entry and add the new entry
+		oldIndexEntries := indexFile[oldKeyValue]
+		oldEntryIndex := slices.IndexFunc(oldIndexEntries, idComparer)
+		oldIndexEntries = append(oldIndexEntries[:oldEntryIndex], oldIndexEntries[oldEntryIndex+1:]...)
+		indexFile[oldKeyValue] = oldIndexEntries
+		indexFile[newKeyValue] = append(indexFile[newKeyValue], createIndexEntry(e, ic.Field, ic.Include))
 		fi.Save(ic.Field)
 	}
 	return nil
