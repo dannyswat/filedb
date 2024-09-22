@@ -16,6 +16,7 @@ type FileDB[T FileEntity] interface {
 	Delete(id int) error
 	Find(id int) (T, error)
 	List(field, value string) ([]T, error)
+	ListAll() ([]T, error)
 	ListIndexFields(field string, value string) ([]*IndexEntry, error)
 	ListAllIndexFields(field string) ([]*IndexEntry, error)
 	GetCount() int
@@ -106,6 +107,18 @@ func (db *fileDB[T]) List(field, value string) ([]T, error) {
 	ids := db.index.SearchId(field, value)
 	es := make([]T, 0)
 	for _, id := range ids {
+		e, err := db.Find(id)
+		if err != nil {
+			return nil, err
+		}
+		es = append(es, e)
+	}
+	return es, nil
+}
+
+func (db *fileDB[T]) ListAll() ([]T, error) {
+	es := make([]T, 0)
+	for _, id := range db.index.ListAllIds() {
 		e, err := db.Find(id)
 		if err != nil {
 			return nil, err

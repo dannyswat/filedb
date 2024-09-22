@@ -32,6 +32,7 @@ type FileIndex[T FileEntity] interface {
 	SearchIndex(field string, value string) []*IndexEntry
 	SearchAllIndex(field string) []*IndexEntry
 	FindMaxIdAndCount() (int, int)
+	ListAllIds() []int
 }
 
 type fileIndex[T FileEntity] struct {
@@ -352,4 +353,18 @@ func (fi *fileIndex[T]) FindMaxIdAndCount() (int, int) {
 		break
 	}
 	return max, count
+}
+
+func (fi *fileIndex[T]) ListAllIds() []int {
+	ids := make([]int, 0)
+	if len(fi.indexConfigs) == 0 {
+		return ids
+	}
+	index := fi.indexes[fi.indexConfigs[0].Field]
+	for _, entries := range index {
+		for _, entry := range entries {
+			ids = append(ids, entry.ID)
+		}
+	}
+	return ids
 }
